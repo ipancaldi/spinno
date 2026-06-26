@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spinno Mockup Studio</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #efeee8;
+        color: #171817;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #root:empty {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+      }
+
+      .boot {
+        max-width: 460px;
+        padding: 28px;
+        border: 1px solid rgba(22, 24, 23, 0.12);
+        border-radius: 12px;
+        background: rgba(250, 250, 247, 0.82);
+        box-shadow: 0 24px 70px rgba(30, 32, 30, 0.12);
+      }
+
+      .boot strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 18px;
+      }
+
+      .boot p {
+        margin: 0;
+        color: #6c706d;
+        line-height: 1.5;
+      }
+
+      .boot code {
+        color: #20564e;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="boot">
+        <strong>Loading Spinno Studio</strong>
+        <p>If this message stays visible, open the app from the dev server at <code>http://localhost:5173/</code> or run <code>npm run dev</code> in this folder.</p>
+      </div>
+    </div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

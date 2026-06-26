@@ -1,0 +1,11 @@
+Model Information:
+* title:	Low-Poly Modern Laptop with Closing Animation
+* source:	https://sketchfab.com/3d-models/low-poly-modern-laptop-with-closing-animation-c2a2194462be4f119eff2f1355d03fb1
+* author:	murattd3v (https://sketchfab.com/murattd3v)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Low-Poly Modern Laptop with Closing Animation" (https://sketchfab.com/3d-models/low-poly-modern-laptop-with-closing-animation-c2a2194462be4f119eff2f1355d03fb1) by murattd3v (https://sketchfab.com/murattd3v) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
