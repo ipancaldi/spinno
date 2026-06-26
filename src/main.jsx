@@ -278,8 +278,8 @@ function fitImageToCanvas(image, fit, scale, offsetX, offsetY, alignment, aspect
 }
 
 function drawBackgroundImage(ctx, image, width, height, fit, scale, offsetX, offsetY, alignment) {
-  const mediaWidth = image.naturalWidth || image.width || width;
-  const mediaHeight = image.naturalHeight || image.height || height;
+  const mediaWidth = image.videoWidth || image.naturalWidth || image.width || width;
+  const mediaHeight = image.videoHeight || image.naturalHeight || image.height || height;
   const imgRatio = mediaWidth / mediaHeight;
   const canvasRatio = width / height;
   let drawWidth;
@@ -514,6 +514,7 @@ function MockupViewer({
   gradientColor,
   transparent,
   bgImage,
+  bgMime,
   bgFit,
   bgScale,
   bgX,
@@ -563,6 +564,8 @@ function MockupViewer({
   const glossRef = useRef(screenGloss);
   const bgMediaRef = useRef(null);
   const bgBackgroundTextureRef = useRef(null);
+  const bgCanvasRef = useRef(null);
+  const bgAnimatedRef = useRef(false);
   const rebuildBackgroundRef = useRef(null);
   const raycasterRef = useRef(null);
   const dynamicFrameRef = useRef(null);
@@ -865,6 +868,7 @@ function MockupViewer({
         );
         dynamicFrame.texture.needsUpdate = true;
       }
+      if (bgAnimatedRef.current) rebuildBackgroundRef.current?.();
       renderer.render(scene, camera);
     };
     animate();
@@ -979,8 +983,8 @@ function MockupViewer({
         bgBackgroundTextureRef.current = null;
       }
     };
-    const hasImage = !!bgMediaRef.current;
-    if (!hasImage) {
+    const media = bgMediaRef.current;
+    if (!media) {
       disposePrev();
       if (transparent) {
         scene.background = null;
@@ -1005,13 +1009,21 @@ function MockupViewer({
       scene.background = texture;
       return;
     }
+    // Backdrop media: composite gradient/solid base + media into a persistent
+    // canvas so animated (video / gif) backdrops can update per-frame cheaply.
     const size = new THREE.Vector2();
     renderer.getSize(size);
     const w = Math.max(2, Math.round(size.x));
     const h = Math.max(2, Math.round(size.y));
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
+    let canvas = bgCanvasRef.current;
+    if (!canvas) {
+      canvas = document.createElement("canvas");
+      bgCanvasRef.current = canvas;
+    }
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
     const ctx = canvas.getContext("2d");
     if (transparent) {
       ctx.clearRect(0, 0, w, h);
@@ -1025,12 +1037,15 @@ function MockupViewer({
       ctx.fillStyle = backgroundColor;
       ctx.fillRect(0, 0, w, h);
     }
-    drawBackgroundImage(ctx, bgMediaRef.current, w, h, bgFit, bgScale, bgX, bgY, bgAlignment);
-    disposePrev();
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    bgBackgroundTextureRef.current = texture;
-    scene.background = texture;
+    drawBackgroundImage(ctx, media, w, h, bgFit, bgScale, bgX, bgY, bgAlignment);
+    if (!bgBackgroundTextureRef.current || bgBackgroundTextureRef.current.image !== canvas) {
+      disposePrev();
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      bgBackgroundTextureRef.current = texture;
+    }
+    bgBackgroundTextureRef.current.needsUpdate = true;
+    scene.background = bgBackgroundTextureRef.current;
   }, [backgroundMode, backgroundColor, gradientColor, transparent, bgFit, bgScale, bgX, bgY, bgAlignment]);
 
   useEffect(() => {
@@ -1041,16 +1056,36 @@ function MockupViewer({
   useEffect(() => {
     if (!bgImage) {
       bgMediaRef.current = null;
+      bgAnimatedRef.current = false;
       rebuildBackgroundRef.current?.();
-      return;
+      return undefined;
+    }
+    if (bgMime?.startsWith("video/")) {
+      const video = document.createElement("video");
+      video.src = bgImage;
+      video.muted = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      video.onloadeddata = () => {
+        bgMediaRef.current = video;
+        bgAnimatedRef.current = true;
+        video.play().catch(() => {});
+        rebuildBackgroundRef.current?.();
+      };
+      return () => {
+        video.pause();
+      };
     }
     const image = new Image();
     image.onload = () => {
       bgMediaRef.current = image;
+      bgAnimatedRef.current = bgMime === "image/gif";
       rebuildBackgroundRef.current?.();
     };
     image.src = bgImage;
-  }, [bgImage]);
+    return undefined;
+  }, [bgImage, bgMime]);
 
   useEffect(() => {
     if (!screenImage) return;
@@ -1204,7 +1239,13 @@ function MockupViewer({
     width -= width % 2;
     height -= height % 2;
     const video = mediaKindRef.current === "video" ? mediaElementRef.current : null;
-    const duration = Number.isFinite(video?.duration) && video.duration > 0 ? video.duration : 6;
+    const bgVideo = bgMediaRef.current && bgMediaRef.current.tagName === "VIDEO" ? bgMediaRef.current : null;
+    const clipDurations = [video?.duration, bgVideo?.duration].filter((d) => Number.isFinite(d) && d > 0);
+    // Match the longest imported clip; fall back to ~5s when only animated GIFs are present.
+    const duration = clipDurations.length ? Math.max(...clipDurations) : 5;
+    if (bgVideo) {
+      try { bgVideo.currentTime = 0; bgVideo.play().catch(() => {}); } catch (error) { /* noop */ }
+    }
 
     renderer.setPixelRatio(1);
     renderer.setSize(width, height, false);
@@ -1288,6 +1329,7 @@ function App() {
   const [screenY, setScreenY] = useState(0);
   const [screenAlignment, setScreenAlignment] = useState("center");
   const [bgImage, setBgImage] = useState(null);
+  const [bgMime, setBgMime] = useState("");
   const [bgName, setBgName] = useState("");
   const [bgFit, setBgFit] = useState("cover");
   const [bgScale, setBgScale] = useState(1);
@@ -1330,6 +1372,9 @@ function App() {
     return { width: Math.max(1, Math.round(longEdge * aspect)), height: longEdge };
   }, [currentExport, viewportSize]);
 
+  const animatedMimes = ["video/mp4", "image/gif"];
+  const hasAnimatedMedia = animatedMimes.includes(screenMime) || animatedMimes.includes(bgMime);
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
@@ -1360,12 +1405,13 @@ function App() {
   }, []);
 
   const handleBgFile = useCallback((file) => {
-    const supportedTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+    const supportedTypes = ["image/png", "image/jpeg", "image/webp", "image/gif", "video/mp4"];
     if (!file || !supportedTypes.includes(file.type)) return;
     if (bgObjectUrlRef.current) URL.revokeObjectURL(bgObjectUrlRef.current);
     const url = URL.createObjectURL(file);
     bgObjectUrlRef.current = url;
     setBgImage(url);
+    setBgMime(file.type);
     setBgName(file.name);
     setBgScale(1);
     setBgX(0);
@@ -1377,6 +1423,7 @@ function App() {
     if (bgObjectUrlRef.current) URL.revokeObjectURL(bgObjectUrlRef.current);
     bgObjectUrlRef.current = null;
     setBgImage(null);
+    setBgMime("");
     setBgName("");
   }, []);
 
@@ -1448,10 +1495,17 @@ function App() {
             >
               {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
             </button>
-            <button className="exportButton" type="button" onClick={startExport}>
-              <ArrowDownToLine size={17} />
-              Export PNG
-            </button>
+            {hasAnimatedMedia ? (
+              <button className="exportButton" type="button" onClick={startVideoExport}>
+                <Film size={17} />
+                Export MP4
+              </button>
+            ) : (
+              <button className="exportButton" type="button" onClick={startExport}>
+                <ArrowDownToLine size={17} />
+                Export PNG
+              </button>
+            )}
           </div>
         </header>
 
@@ -1482,6 +1536,7 @@ function App() {
             gradientColor={gradientColor}
             transparent={transparent}
             bgImage={bgImage}
+            bgMime={bgMime}
             bgFit={bgFit}
             bgScale={bgScale}
             bgX={bgX}
@@ -1613,7 +1668,7 @@ function App() {
         <details className="controlSection">
           <summary className="sectionLabel">
             <Sun size={16} />
-            Lighting &amp; background
+            Lighting
             <ChevronDown className="chevron" size={15} />
           </summary>
           <div className="sectionBody">
@@ -1629,7 +1684,17 @@ function App() {
             <Range label="Brightness" value={ambient} min={0.35} max={1.8} step={0.01} onChange={setAmbient} />
             <Toggle checked={shadows} onChange={setShadows} label="Cast shadow" />
             <Range label="Shadow softness" value={shadowBlur} min={0} max={14} step={0.5} onChange={setShadowBlur} />
-            <Select label="Background" value={backgroundMode} onChange={setBackgroundMode}>
+          </div>
+        </details>
+
+        <details className="controlSection">
+          <summary className="sectionLabel">
+            <ImagePlus size={16} />
+            Background
+            <ChevronDown className="chevron" size={15} />
+          </summary>
+          <div className="sectionBody">
+            <Select label="Fill" value={backgroundMode} onChange={setBackgroundMode}>
               {Object.entries(BACKGROUNDS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
             </Select>
             <div className="colorPair">
@@ -1647,16 +1712,6 @@ function App() {
               ) : null}
             </div>
             <Toggle checked={transparent} onChange={setTransparent} label="Transparent background" />
-          </div>
-        </details>
-
-        <details className="controlSection">
-          <summary className="sectionLabel">
-            <ImagePlus size={16} />
-            Backdrop image
-            <ChevronDown className="chevron" size={15} />
-          </summary>
-          <div className="sectionBody">
             <button
               className={`uploadBox ${bgDragActive ? "active" : ""}`}
               type="button"
@@ -1666,14 +1721,14 @@ function App() {
               onDrop={onBgDrop}
             >
               <Upload size={20} />
-              <strong>{bgName || "Upload backdrop image"}</strong>
-              <span>Drop on the background, or click · PNG, JPG, WebP, GIF</span>
+              <strong>{bgName || "Upload backdrop image / video"}</strong>
+              <span>Drop on the background, or click · PNG, JPG, WebP, GIF, MP4</span>
             </button>
             <input
               ref={bgInputRef}
               className="hiddenInput"
               type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
+              accept="image/png,image/jpeg,image/webp,image/gif,video/mp4"
               onChange={(event) => handleBgFile(event.target.files?.[0])}
             />
             {bgImage ? (
@@ -1754,21 +1809,34 @@ function App() {
                 }} />
               </div>
             ) : null}
-            <p className="exportNote">Exports the entire visible canvas at your current aspect ratio — never cropped.</p>
-            <button className="exportFull" type="button" onClick={startExport}>
-              <ArrowDownToLine size={17} />
-              Export PNG
-            </button>
-            <button className="secondaryAction" type="button" onClick={startViewExport}>
-              <Camera size={16} />
-              Export at screen resolution
-            </button>
-            {screenMime === "video/mp4" ? (
-              <button className="exportFull videoExport" type="button" onClick={startVideoExport}>
-                <Film size={17} />
-                Export MP4
-              </button>
-            ) : null}
+            <p className="exportNote">
+              {hasAnimatedMedia
+                ? "Animated media detected — exports an MP4 matching the clip length, at your current aspect ratio."
+                : "Exports the entire visible canvas at your current aspect ratio — never cropped."}
+            </p>
+            {hasAnimatedMedia ? (
+              <>
+                <button className="exportFull videoExport" type="button" onClick={startVideoExport}>
+                  <Film size={17} />
+                  Export MP4
+                </button>
+                <button className="secondaryAction" type="button" onClick={startExport}>
+                  <ArrowDownToLine size={16} />
+                  Export still frame (PNG)
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="exportFull" type="button" onClick={startExport}>
+                  <ArrowDownToLine size={17} />
+                  Export PNG
+                </button>
+                <button className="secondaryAction" type="button" onClick={startViewExport}>
+                  <Camera size={16} />
+                  Export at screen resolution
+                </button>
+              </>
+            )}
           </div>
         </details>
       </aside>
