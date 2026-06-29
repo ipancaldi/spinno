@@ -7,9 +7,12 @@
   --muted: #6c706d;
   --line: rgba(22, 24, 23, 0.12);
   --line-strong: rgba(22, 24, 23, 0.2);
-  --accent: #2f6f64;
-  --accent-strong: #20564e;
-  --soft: rgba(47, 111, 100, 0.1);
+  --accent: #ff8479;
+  --accent-strong: #e85a4d;
+  --soft: rgba(255, 132, 121, 0.14);
+  --soft-hover: rgba(255, 132, 121, 0.07);
+  --btn-accent: #e85a4d;
+  --btn-accent-hover: #ff8479;
   --shadow: 0 24px 70px rgba(30, 32, 30, 0.14);
   font-family: "Geist", "Satoshi", "Avenir Next", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
@@ -84,11 +87,20 @@ button {
   height: 38px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255,255,255,0.8);
-  border-radius: 8px;
-  background: #191b1a;
-  color: #f8f7f1;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+.brandMark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.brandLogoBg {
+  fill: #000;
+}
+
+:root[data-theme="dark"] .brandLogoBg {
+  fill: #fff;
 }
 
 .topbar p,
@@ -114,8 +126,8 @@ button {
   min-height: 40px;
   padding: 0 15px;
   border-radius: 8px;
-  background: var(--ink);
-  color: #f8f7f1;
+  background: var(--btn-accent);
+  color: #fff;
   font-weight: 650;
   letter-spacing: 0;
   cursor: pointer;
@@ -124,7 +136,7 @@ button {
 
 .exportButton:hover,
 .exportFull:hover {
-  background: var(--accent-strong);
+  background: var(--btn-accent-hover);
 }
 
 .topbar > div:last-child {
@@ -374,10 +386,19 @@ details[open] > .sectionLabel .chevron {
   font-weight: 650;
 }
 
+.deviceGrid button:hover {
+  border-color: var(--line-strong);
+  background: var(--soft-hover);
+}
+
 .deviceGrid button.active {
   background: var(--soft);
-  border-color: rgba(47, 111, 100, 0.38);
+  border-color: var(--accent);
   color: var(--accent-strong);
+}
+
+.deviceGrid button.active:hover {
+  background: var(--soft);
 }
 
 .uploadBox {
@@ -396,7 +417,7 @@ details[open] > .sectionLabel .chevron {
 }
 
 .uploadBox.active {
-  border-color: rgba(47, 111, 100, 0.6);
+  border-color: var(--accent);
   background: var(--soft);
   color: var(--accent-strong);
 }
@@ -435,12 +456,21 @@ details[open] > .sectionLabel .chevron {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.segmented button:hover {
+  background: var(--soft-hover);
 }
 
 .segmented button.active {
-  background: var(--panel-strong);
-  color: var(--ink);
-  box-shadow: 0 1px 8px rgba(25, 28, 26, 0.08);
+  background: var(--soft);
+  color: var(--accent-strong);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.segmented button.active:hover {
+  background: var(--soft);
 }
 
 .field,
@@ -648,9 +678,14 @@ details[open] > .sectionLabel .chevron {
   border: 1px solid var(--line-strong);
 }
 
+.toggle:hover {
+  border-color: var(--line-strong);
+}
+
 .toggle.active {
   background: var(--soft);
-  border-color: rgba(47, 111, 100, 0.34);
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .toggle.active > span {
@@ -714,7 +749,7 @@ details[open] > .sectionLabel .chevron {
     padding: 14px;
   }
 
-  .topbar span {
+  .topbar span:not(.brandMark) {
     display: none;
   }
 
@@ -756,9 +791,9 @@ details[open] > .sectionLabel .chevron {
   --muted: #9aa1a8;
   --line: rgba(255, 255, 255, 0.1);
   --line-strong: rgba(255, 255, 255, 0.2);
-  --accent: #5aa394;
-  --accent-strong: #79b6a8;
-  --soft: rgba(90, 163, 148, 0.16);
+  --accent: #ff8479;
+  --accent-strong: #ff9d93;
+  --soft: rgba(255, 132, 121, 0.18);
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
 }
 
@@ -791,23 +826,6 @@ details[open] > .sectionLabel .chevron {
 
 :root[data-theme="dark"] .segmented {
   background: rgba(255, 255, 255, 0.04);
-}
-
-:root[data-theme="dark"] .exportButton,
-:root[data-theme="dark"] .exportFull {
-  background: #e9ecef;
-  color: #14161a;
-}
-
-:root[data-theme="dark"] .exportButton:hover,
-:root[data-theme="dark"] .exportFull:hover {
-  background: var(--accent-strong);
-  color: #0f1115;
-}
-
-:root[data-theme="dark"] .brandMark {
-  background: #e9ecef;
-  color: #14161a;
 }
 
 :root[data-theme="dark"] .viewerHint,

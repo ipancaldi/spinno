@@ -414,6 +414,18 @@ function Toggle({ checked, onChange, label }) {
   );
 }
 
+function SpinnoLogo() {
+  return (
+    <svg viewBox="0 0 158 158" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Spinno">
+      <rect width="158" height="158" rx="32" className="brandLogoBg" />
+      <path
+        d="M32.9224 117.49C84.2876 123.047 41.3251 27.6348 95.2654 27.6348H124.946V40.51C78.3243 34.4112 121.693 130.365 62.6031 130.365H32.9224V117.49Z"
+        fill="#FF8479"
+      />
+    </svg>
+  );
+}
+
 function XYPad({ label, hint, x, y, minX = -1, maxX = 1, minY = -1, maxY = 1, resetX = 0, resetY = 0, onChange }) {
   const ref = useRef(null);
   const dragging = useRef(false);
@@ -1479,7 +1491,7 @@ function App() {
       <section className="studio">
         <header className="topbar">
           <div>
-            <span className="brandMark"><Move3D size={18} /></span>
+            <span className="brandMark"><SpinnoLogo /></span>
             <div>
               <p>Spinno Studio</p>
               <span>3D device mockups for product screens</span>
