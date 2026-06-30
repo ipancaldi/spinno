@@ -1340,16 +1340,16 @@ function App() {
     return preset.width / preset.height;
   }, [sizePreset, customW, customH]);
 
+  const freeDims = useMemo(() => ({
+    width: Math.max(1, Math.round(viewportSize.width * FREE_EXPORT_SCALE)),
+    height: Math.max(1, Math.round(viewportSize.height * FREE_EXPORT_SCALE))
+  }), [viewportSize]);
+
   const exportDims = useMemo(() => {
-    if (sizePreset === "free") {
-      return {
-        width: Math.max(1, Math.round(viewportSize.width * FREE_EXPORT_SCALE)),
-        height: Math.max(1, Math.round(viewportSize.height * FREE_EXPORT_SCALE))
-      };
-    }
+    if (sizePreset === "free") return freeDims;
     if (sizePreset === "custom") return { width: Math.max(1, customW), height: Math.max(1, customH) };
     return { width: SIZE_PRESETS[sizePreset].width, height: SIZE_PRESETS[sizePreset].height };
-  }, [sizePreset, customW, customH, viewportSize]);
+  }, [sizePreset, customW, customH, freeDims]);
 
   const animatedMimes = ["video/mp4", "image/gif"];
   const hasAnimatedMedia = animatedMimes.includes(screenMime) || animatedMimes.includes(bgMime);
@@ -1570,15 +1570,16 @@ function App() {
       <aside className="controlPanel">
         <div className="panelHeader">
           <p>Mockup controls</p>
-          <div className="headerSize">
-            <span className="headerSelect" title="Canvas size">
-              <select value={sizePreset} onChange={(event) => setSizePreset(event.target.value)}>
-                {Object.entries(SIZE_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}
-              </select>
-              <ChevronDown size={14} aria-hidden="true" />
-            </span>
-            <span className="headerDims">{exportDims.width} × {exportDims.height} px</span>
-          </div>
+          <span className="headerSelect" title="Canvas size">
+            <select value={sizePreset} onChange={(event) => setSizePreset(event.target.value)}>
+              {Object.entries(SIZE_PRESETS).map(([key, preset]) => (
+                <option key={key} value={key}>
+                  {key === "free" ? `Free · ${freeDims.width} × ${freeDims.height}` : preset.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} aria-hidden="true" />
+          </span>
         </div>
 
         <details className="controlSection" open>

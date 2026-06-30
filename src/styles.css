@@ -116,20 +116,6 @@ button {
   font-size: 12px;
 }
 
-.headerSize {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  flex: none;
-}
-
-.headerDims {
-  font-size: 11px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
 .headerSelect {
   position: relative;
   display: inline-flex;
