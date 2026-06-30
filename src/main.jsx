@@ -104,12 +104,17 @@ const LIGHTING_PRESETS = {
   flat: { label: "No shadow", ambient: 2.2, key: 2.1, fill: 1.1, shadow: false }
 };
 
-const EXPORT_PRESETS = {
-  square: { label: "1080 x 1080", width: 1080, height: 1080 },
-  wide: { label: "1920 x 1080", width: 1920, height: 1080 },
-  fourk: { label: "4K", width: 3840, height: 2160 },
+// "Free" lets the canvas fill the window (no fixed aspect); the rest lock the
+// canvas to an exact size that it is letterboxed into and exported at.
+const SIZE_PRESETS = {
+  free: { label: "Free (fit window)" },
+  square: { label: "Square · 1080 × 1080", width: 1080, height: 1080 },
+  landscape: { label: "Landscape · 1920 × 1080", width: 1920, height: 1080 },
+  portrait: { label: "Portrait · 1080 × 1920", width: 1080, height: 1920 },
+  uhd: { label: "4K · 3840 × 2160", width: 3840, height: 2160 },
   custom: { label: "Custom", width: 1600, height: 1200 }
 };
+const FREE_EXPORT_SCALE = 2;
 
 const ALIGNMENT = ["center", "top", "bottom", "left", "right"];
 
@@ -138,12 +143,18 @@ function createTextureCanvas(aspect) {
   return canvas;
 }
 
-function createDefaultTexture(aspect = 9 / 19.5) {
+function createDefaultTexture(aspect = 9 / 19.5, flipX = false) {
   const canvas = createTextureCanvas(aspect);
   const ctx = canvas.getContext("2d");
   const w = canvas.width;
   const h = canvas.height;
   const minEdge = Math.min(w, h);
+  // The overlay plane on some devices (e.g. the laptop) is viewed from its
+  // back face, so its texture must be pre-mirrored to read correctly.
+  if (flipX) {
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);
+  }
 
   // Clean off-white surface
   ctx.fillStyle = "#fbfbfa";
@@ -552,10 +563,9 @@ function MockupViewer({
   cameraDistance,
   exportRequest,
   onExportComplete,
-  viewExportRequest,
-  onViewExportComplete,
   videoExportRequest,
   onVideoExportComplete,
+  onLoadingChange,
   apiRef
 }) {
   const mountRef = useRef(null);
@@ -625,7 +635,7 @@ function MockupViewer({
         };
       }
     } else {
-      texture = createDefaultTexture(aspect);
+      texture = createDefaultTexture(aspect, Boolean(preset.screen.flipX));
     }
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = 8;
@@ -639,6 +649,8 @@ function MockupViewer({
     if (!scene) return;
     const buildId = buildIdRef.current + 1;
     buildIdRef.current = buildId;
+    onLoadingChange?.(true);
+    try {
     if (deviceGroupRef.current) {
       scene.remove(deviceGroupRef.current);
       deviceGroupRef.current.traverse((object) => {
@@ -763,7 +775,12 @@ function MockupViewer({
       controls.target.set(...preset.target);
       controls.update();
     }
-  }, [applyScreenTexture, cameraDistance, deviceType, gltfLoader, materialConfig.original, materialConfig.color, materialConfig.metalness, materialConfig.roughness, rotationX, rotationY, rotationZ]);
+    } catch (error) {
+      console.error("Spinno: failed to build device", error);
+    } finally {
+      if (buildId === buildIdRef.current) onLoadingChange?.(false);
+    }
+  }, [applyScreenTexture, cameraDistance, deviceType, gltfLoader, materialConfig.original, materialConfig.color, materialConfig.metalness, materialConfig.roughness, rotationX, rotationY, rotationZ, onLoadingChange]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -844,7 +861,10 @@ function MockupViewer({
     contactShadowTextureRef.current = contactShadowTexture;
     scene.add(contactShadow);
 
-    textureRef.current = createDefaultTexture(DEVICE_PRESETS[deviceType].screen.size[0] / DEVICE_PRESETS[deviceType].screen.size[1]);
+    textureRef.current = createDefaultTexture(
+      DEVICE_PRESETS[deviceType].screen.size[0] / DEVICE_PRESETS[deviceType].screen.size[1],
+      Boolean(DEVICE_PRESETS[deviceType].screen.flipX)
+    );
     buildDevice();
 
     const resize = () => {
@@ -1146,19 +1166,9 @@ function MockupViewer({
     const currentSize = new THREE.Vector2();
     renderer.getSize(currentSize);
     const currentPixelRatio = renderer.getPixelRatio();
-    // Always export the entire visible canvas: keep the on-screen aspect ratio
-    // and only use the requested size as a resolution (long-edge) target.
-    const viewAspect = currentSize.x / currentSize.y;
-    const targetLongEdge = Math.max(exportRequest.width, exportRequest.height, 1);
-    let width;
-    let height;
-    if (viewAspect >= 1) {
-      width = Math.round(targetLongEdge);
-      height = Math.max(1, Math.round(targetLongEdge / viewAspect));
-    } else {
-      height = Math.round(targetLongEdge);
-      width = Math.max(1, Math.round(targetLongEdge * viewAspect));
-    }
+    // Export the exact requested canvas size (matches the on-screen framing).
+    const width = Math.max(1, Math.round(exportRequest.width));
+    const height = Math.max(1, Math.round(exportRequest.height));
 
     renderer.setPixelRatio(1);
     renderer.setSize(width, height, false);
@@ -1185,45 +1195,6 @@ function MockupViewer({
   }, [exportRequest, onExportComplete]);
 
   useEffect(() => {
-    if (!viewExportRequest) return;
-    const renderer = rendererRef.current;
-    const camera = cameraRef.current;
-    const scene = sceneRef.current;
-    if (!renderer || !camera || !scene) return;
-
-    const currentSize = new THREE.Vector2();
-    renderer.getSize(currentSize);
-    const currentPixelRatio = renderer.getPixelRatio();
-    const previousAspect = camera.aspect;
-    const scale = viewExportRequest.scale || 2;
-    const width = Math.max(1, Math.round(currentSize.x * scale));
-    const height = Math.max(1, Math.round(currentSize.y * scale));
-
-    renderer.setPixelRatio(1);
-    renderer.setSize(width, height, false);
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-    rebuildBackgroundRef.current?.();
-    renderer.render(scene, camera);
-    renderer.domElement.toBlob((blob) => {
-      if (blob) {
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = `spinno-view-${width}x${height}.png`;
-        link.click();
-        window.setTimeout(() => URL.revokeObjectURL(link.href), 4000);
-      }
-      renderer.setPixelRatio(currentPixelRatio);
-      renderer.setSize(currentSize.x, currentSize.y, false);
-      camera.aspect = previousAspect;
-      camera.updateProjectionMatrix();
-      rebuildBackgroundRef.current?.();
-      renderer.render(scene, camera);
-      onViewExportComplete();
-    }, "image/png");
-  }, [viewExportRequest, onViewExportComplete]);
-
-  useEffect(() => {
     if (!videoExportRequest) return;
     const renderer = rendererRef.current;
     const camera = cameraRef.current;
@@ -1237,17 +1208,8 @@ function MockupViewer({
     renderer.getSize(currentSize);
     const currentPixelRatio = renderer.getPixelRatio();
     const previousAspect = camera.aspect;
-    const viewAspect = currentSize.x / currentSize.y;
-    const targetLongEdge = Math.max(videoExportRequest.width, videoExportRequest.height, 1);
-    let width;
-    let height;
-    if (viewAspect >= 1) {
-      width = Math.round(targetLongEdge);
-      height = Math.max(1, Math.round(targetLongEdge / viewAspect));
-    } else {
-      height = Math.round(targetLongEdge);
-      width = Math.max(1, Math.round(targetLongEdge * viewAspect));
-    }
+    let width = Math.max(1, Math.round(videoExportRequest.width));
+    let height = Math.max(1, Math.round(videoExportRequest.height));
     width -= width % 2;
     height -= height % 2;
     const video = mediaKindRef.current === "video" ? mediaElementRef.current : null;
@@ -1352,11 +1314,11 @@ function App() {
   const [rotationY, setRotationY] = useState(0.34);
   const [rotationZ, setRotationZ] = useState(-0.03);
   const [cameraDistance, setCameraDistance] = useState(1.3);
-  const [exportPreset, setExportPreset] = useState("square");
-  const [exportWidth, setExportWidth] = useState(1080);
-  const [exportHeight, setExportHeight] = useState(1080);
+  const [sizePreset, setSizePreset] = useState("free");
+  const [customW, setCustomW] = useState(1600);
+  const [customH, setCustomH] = useState(1200);
+  const [deviceLoading, setDeviceLoading] = useState(true);
   const [exportRequest, setExportRequest] = useState(null);
-  const [viewExportRequest, setViewExportRequest] = useState(null);
   const [videoExportRequest, setVideoExportRequest] = useState(null);
   const [dragActive, setDragActive] = useState(false);
 
@@ -1372,17 +1334,22 @@ function App() {
   const [previewMode, setPreviewMode] = useState(false);
   const [viewportSize, setViewportSize] = useState({ width: 1, height: 1 });
 
-  const currentExport = useMemo(() => {
-    if (exportPreset === "custom") return { width: exportWidth, height: exportHeight };
-    return EXPORT_PRESETS[exportPreset];
-  }, [exportHeight, exportPreset, exportWidth]);
+  const frameAspect = useMemo(() => {
+    if (sizePreset === "free") return null;
+    const preset = sizePreset === "custom" ? { width: customW, height: customH } : SIZE_PRESETS[sizePreset];
+    return preset.width / preset.height;
+  }, [sizePreset, customW, customH]);
 
   const exportDims = useMemo(() => {
-    const longEdge = Math.max(currentExport.width, currentExport.height);
-    const aspect = viewportSize.height > 0 ? viewportSize.width / viewportSize.height : 1;
-    if (aspect >= 1) return { width: longEdge, height: Math.max(1, Math.round(longEdge / aspect)) };
-    return { width: Math.max(1, Math.round(longEdge * aspect)), height: longEdge };
-  }, [currentExport, viewportSize]);
+    if (sizePreset === "free") {
+      return {
+        width: Math.max(1, Math.round(viewportSize.width * FREE_EXPORT_SCALE)),
+        height: Math.max(1, Math.round(viewportSize.height * FREE_EXPORT_SCALE))
+      };
+    }
+    if (sizePreset === "custom") return { width: Math.max(1, customW), height: Math.max(1, customH) };
+    return { width: SIZE_PRESETS[sizePreset].width, height: SIZE_PRESETS[sizePreset].height };
+  }, [sizePreset, customW, customH, viewportSize]);
 
   const animatedMimes = ["video/mp4", "image/gif"];
   const hasAnimatedMedia = animatedMimes.includes(screenMime) || animatedMimes.includes(bgMime);
@@ -1475,15 +1442,11 @@ function App() {
   };
 
   const startExport = () => {
-    setExportRequest({ ...currentExport, id: Date.now() });
-  };
-
-  const startViewExport = () => {
-    setViewExportRequest({ scale: 2, id: Date.now() });
+    setExportRequest({ width: exportDims.width, height: exportDims.height, id: Date.now() });
   };
 
   const startVideoExport = () => {
-    setVideoExportRequest({ ...currentExport, id: Date.now() });
+    setVideoExportRequest({ width: exportDims.width, height: exportDims.height, id: Date.now() });
   };
 
   return (
@@ -1533,7 +1496,8 @@ function App() {
 
         <div
           ref={viewportRef}
-          className="viewport"
+          className={`viewport ${frameAspect ? "framed" : ""}`}
+          style={frameAspect ? { "--frame-aspect": frameAspect } : undefined}
           onDragOver={onViewportDragOver}
           onDragLeave={() => setDragActive(false)}
           onDrop={onDrop}
@@ -1574,11 +1538,14 @@ function App() {
             cameraDistance={cameraDistance}
             exportRequest={exportRequest}
             onExportComplete={() => setExportRequest(null)}
-            viewExportRequest={viewExportRequest}
-            onViewExportComplete={() => setViewExportRequest(null)}
             videoExportRequest={videoExportRequest}
             onVideoExportComplete={() => setVideoExportRequest(null)}
+            onLoadingChange={setDeviceLoading}
           />
+          <div className={`viewerLoader ${deviceLoading ? "active" : ""}`} aria-hidden={!deviceLoading}>
+            <span className="viewerSpinner" />
+            <span>Loading device…</span>
+          </div>
           <div
             className={`dropOverlay ${dragActive ? "active" : ""}`}
           >
@@ -1603,7 +1570,15 @@ function App() {
       <aside className="controlPanel">
         <div className="panelHeader">
           <p>Mockup controls</p>
-          <span>Full view · {exportDims.width} × {exportDims.height}</span>
+          <div className="headerSize">
+            <span className="headerSelect" title="Canvas size">
+              <select value={sizePreset} onChange={(event) => setSizePreset(event.target.value)}>
+                {Object.entries(SIZE_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}
+              </select>
+              <ChevronDown size={14} aria-hidden="true" />
+            </span>
+            <span className="headerDims">{exportDims.width} × {exportDims.height} px</span>
+          </div>
         </div>
 
         <details className="controlSection" open>
@@ -1800,31 +1775,18 @@ function App() {
             <ChevronDown className="chevron" size={15} />
           </summary>
           <div className="sectionBody">
-            <Select label="Resolution (long edge)" value={exportPreset} onChange={(value) => {
-              setExportPreset(value);
-              if (value !== "custom") {
-                setExportWidth(EXPORT_PRESETS[value].width);
-                setExportHeight(EXPORT_PRESETS[value].height);
-              }
-            }}>
-              {Object.entries(EXPORT_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}
-            </Select>
-            {exportPreset === "custom" ? (
+            {sizePreset === "custom" ? (
               <div className="exportGrid">
-                <NumberField label="Width" value={exportWidth} onChange={(value) => {
-                  setExportPreset("custom");
-                  setExportWidth(value);
-                }} />
-                <NumberField label="Height" value={exportHeight} onChange={(value) => {
-                  setExportPreset("custom");
-                  setExportHeight(value);
-                }} />
+                <NumberField label="Width (px)" value={customW} onChange={setCustomW} />
+                <NumberField label="Height (px)" value={customH} onChange={setCustomH} />
               </div>
             ) : null}
             <p className="exportNote">
               {hasAnimatedMedia
-                ? "Animated media detected — exports an MP4 matching the clip length, at your current aspect ratio."
-                : "Exports the entire visible canvas at your current aspect ratio — never cropped."}
+                ? `Animated media detected — exports an MP4 (clip length) at ${exportDims.width} × ${exportDims.height}.`
+                : sizePreset === "free"
+                  ? "Free canvas — exports exactly what you see; resize the window to change the size."
+                  : `Exports a fixed ${exportDims.width} × ${exportDims.height} frame.`}
             </p>
             {hasAnimatedMedia ? (
               <>
@@ -1838,16 +1800,10 @@ function App() {
                 </button>
               </>
             ) : (
-              <>
-                <button className="exportFull" type="button" onClick={startExport}>
-                  <ArrowDownToLine size={17} />
-                  Export PNG
-                </button>
-                <button className="secondaryAction" type="button" onClick={startViewExport}>
-                  <Camera size={16} />
-                  Export at screen resolution
-                </button>
-              </>
+              <button className="exportFull" type="button" onClick={startExport}>
+                <ArrowDownToLine size={17} />
+                Export PNG
+              </button>
             )}
           </div>
         </details>

@@ -116,6 +116,48 @@ button {
   font-size: 12px;
 }
 
+.headerSize {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex: none;
+}
+
+.headerDims {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.headerSelect {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.headerSelect select {
+  appearance: none;
+  max-width: 190px;
+  padding: 6px 26px 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--control);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: 0;
+}
+
+.headerSelect svg {
+  position: absolute;
+  right: 9px;
+  pointer-events: none;
+  color: var(--muted);
+}
+
 .exportButton,
 .exportFull,
 .secondaryAction {
@@ -233,11 +275,59 @@ button {
   inset: 0;
 }
 
+/* Fixed canvas size: letterbox the canvas to the chosen aspect, centered. */
+.viewport.framed {
+  container-type: size;
+  display: grid;
+  place-items: center;
+}
+
+.viewport.framed .viewerCanvas {
+  position: relative;
+  inset: auto;
+  aspect-ratio: var(--frame-aspect);
+  width: min(100cqw, calc(100cqh * var(--frame-aspect)));
+  height: auto;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
 .viewerCanvas canvas {
   display: block;
   width: 100%;
   height: 100%;
   touch-action: none;
+}
+
+.viewerLoader {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.viewerLoader.active {
+  display: flex;
+}
+
+.viewerSpinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  animation: viewerSpin 0.8s linear infinite;
+}
+
+@keyframes viewerSpin {
+  to { transform: rotate(360deg); }
 }
 
 .dropOverlay {
